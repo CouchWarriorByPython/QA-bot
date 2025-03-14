@@ -11,21 +11,22 @@ from bot.utils.helpers import (
     is_admin, questions, generate_keyboard, save_answers
 )
 
-import logging
-
-logger = logging.getLogger(__name__)
+from bot.logger import info, warning, error, debug
 
 
 def register_survey_handlers(router: Router):
     """Register all survey-related handlers"""
+    debug("Реєстрація обробників опитування")
 
     @router.message(CommandStart())
     async def start_command(message: Message, state: FSMContext) -> None:
         """Start the survey when user sends /start command."""
         user_id = message.from_user.id
+        username = message.from_user.username
 
         # If admin, show admin panel instead of starting survey
         if is_admin(user_id):
+            info(f"Адміністратор {user_id} (@{username}) розпочав роботу з ботом")
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Показати результати опитування",
                                       callback_data=AdminCallback(action="all_results").pack())],
@@ -36,6 +37,7 @@ def register_survey_handlers(router: Router):
             return
 
         # Otherwise, start the survey for regular users
+        info(f"Користувач {user_id} (@{username}) розпочав роботу з ботом")
         await state.set_data({
             "current_question": 0,
             "answers": {}
@@ -48,6 +50,9 @@ def register_survey_handlers(router: Router):
         """Start the survey from a callback button."""
         await callback_query.answer()
         user_id = callback_query.from_user.id
+        username = callback_query.from_user.username
+
+        info(f"Користувач {user_id} (@{username}) розпочав опитування")
 
         # Initialize user data
         await state.set_data({
@@ -82,8 +87,10 @@ def register_survey_handlers(router: Router):
         selected = user_answers[q_text]["selected"]
         if answer_text in selected:
             selected.remove(answer_text)
+            debug(f"Користувач {user_id} зняв вибір відповіді '{answer_text}' на питання {question_index + 1}")
         else:
             selected.append(answer_text)
+            debug(f"Користувач {user_id} вибрав відповідь '{answer_text}' на питання {question_index + 1}")
 
         # Update state
         data["answers"] = user_answers
@@ -94,7 +101,7 @@ def register_survey_handlers(router: Router):
             keyboard = await generate_keyboard(question_data, user_answers)
             await callback_query.message.edit_reply_markup(reply_markup=keyboard)
         except TelegramBadRequest as e:
-            logger.error(f"Failed to update keyboard: {e}")
+            error(f"Не вдалося оновити клавіатуру для користувача {user_id}: {e}")
 
     @router.callback_query(AnswerCallback.filter(F.action == "select"))
     async def process_select_answer(callback_query: CallbackQuery, callback_data: AnswerCallback,
@@ -119,6 +126,8 @@ def register_survey_handlers(router: Router):
         data["current_question"] += 1
         await state.set_data(data)
 
+        info(f"Користувач {user_id} відповів '{answer_text}' на питання {question_index + 1}")
+
         # Go to next question
         await send_question(user_id, state)
 
@@ -126,7 +135,10 @@ def register_survey_handlers(router: Router):
     async def process_custom_input_request(callback_query: CallbackQuery, state: FSMContext) -> None:
         """Handle request for custom text input."""
         await callback_query.answer()
-        await bot.send_message(callback_query.from_user.id, "Напишіть ваш варіант відповіді:")
+        user_id = callback_query.from_user.id
+
+        debug(f"Користувач {user_id} вибрав власний варіант відповіді")
+        await bot.send_message(user_id, "Напишіть ваш варіант відповіді:")
         await state.set_state(SurveyStates.custom_input)
 
     @router.callback_query(AnswerCallback.filter(F.action == "done"))
@@ -137,8 +149,11 @@ def register_survey_handlers(router: Router):
 
         # Move to next question
         data = await state.get_data()
+        question_index = data.get("current_question", 0)
         data["current_question"] += 1
         await state.set_data(data)
+
+        debug(f"Користувач {user_id} завершив відповідь на питання {question_index + 1}")
 
         await send_question(user_id, state)
 
@@ -167,12 +182,20 @@ def register_survey_handlers(router: Router):
         data["current_question"] += 1
         await state.set_data(data)
 
+        info(
+            f"Користувач {user_id} надав текстову відповідь на питання {question_index + 1}: '{message.text[:50]}...' " if len(
+                message.text) > 50 else f"Користувач {user_id} надав текстову відповідь на питання {question_index + 1}: '{message.text}'")
+
         await send_question(user_id, state)
 
     @router.message()
     async def handle_unexpected(message: Message) -> None:
         """Handle unexpected messages."""
+        user_id = message.from_user.id
+        warning(f"Користувач {user_id} надіслав неочікуване повідомлення: '{message.text}'")
         await message.answer("Будь ласка, використовуйте кнопки опитування або команду /start для початку опитування.")
+
+    debug("Обробники опитування успішно зареєстровані")
 
 
 async def send_question(user_id: int, state: FSMContext) -> None:
@@ -184,6 +207,7 @@ async def send_question(user_id: int, state: FSMContext) -> None:
 
     # Check if survey is complete
     if question_index >= len(questions):
+        info(f"Користувач {user_id} завершив опитування")
         await bot.send_message(user_id, "Дякую за участь в опитуванні!")
         await save_answers(user_id, user_answers)
         await state.clear()
@@ -192,6 +216,8 @@ async def send_question(user_id: int, state: FSMContext) -> None:
     # Get current question data
     question_data = questions[question_index]
     question_text = f"{question_data['question']}\n\n{question_data['hint']}"
+
+    debug(f"Відправка питання {question_index + 1} користувачу {user_id}")
 
     # Handle questions with answer options
     if question_data["answers"]:
@@ -206,6 +232,7 @@ async def send_question(user_id: int, state: FSMContext) -> None:
 
     # Skip questions without any response type
     else:
+        warning(f"Питання {question_index + 1} не має варіантів відповіді, пропускаємо")
         data["current_question"] += 1
         await state.set_data(data)
         await send_question(user_id, state)

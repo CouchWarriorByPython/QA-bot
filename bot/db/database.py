@@ -1,4 +1,3 @@
-import logging
 import os
 from typing import List, Dict, Any
 from datetime import datetime
@@ -7,9 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.db.models import Base, User, Answer
-
-# Configure logging
-logger = logging.getLogger(__name__)
+from bot.logger import info, error, warning, debug
 
 # Database settings
 DB_PATH = "survey_data.db"
@@ -21,9 +18,9 @@ def init_db():
     """Initialize the database with all required tables"""
     try:
         Base.metadata.create_all(bind=ENGINE)
-        logger.info("Database initialized successfully")
+        info("Database initialized successfully")
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        error(f"Database initialization failed: {e}")
         raise
 
 
@@ -48,6 +45,7 @@ def save_user_answer(user_id: int, question_id: int, answer_text: str, custom_an
         if not user:
             user = User(user_id=user_id, start_time=datetime.now())
             session.add(user)
+            debug(f"Створено нового користувача з ID {user_id}")
 
         # Create and save the answer
         answer = Answer(
@@ -61,10 +59,11 @@ def save_user_answer(user_id: int, question_id: int, answer_text: str, custom_an
 
         # Commit changes
         session.commit()
+        debug(f"Збережено відповідь користувача {user_id} на питання {question_id}")
         return True
     except SQLAlchemyError as e:
         session.rollback()
-        logger.error(f"Error saving answer: {e}")
+        error(f"Помилка збереження відповіді: {e}")
         return False
     finally:
         session.close()
@@ -82,6 +81,7 @@ def save_all_user_answers(user_id: int, answers: Dict[str, Any], questions_map: 
             user = User(user_id=user_id, start_time=datetime.now())
             session.add(user)
             session.flush()  # Flush to get the user ID if it's auto-generated
+            debug(f"Створено нового користувача з ID {user_id}")
 
         # Save each answer
         for question_text, answer_data in answers.items():
@@ -93,7 +93,7 @@ def save_all_user_answers(user_id: int, answers: Dict[str, Any], questions_map: 
                     break
 
             if question_id is None:
-                logger.warning(f"Could not find question_id for: {question_text}")
+                warning(f"Не вдалося знайти ID питання для: {question_text}")
                 continue
 
             # Process the answer
@@ -113,6 +113,7 @@ def save_all_user_answers(user_id: int, answers: Dict[str, Any], questions_map: 
                 timestamp=datetime.now()
             )
             session.add(answer)
+            debug(f"Збережено відповідь користувача {user_id} на питання {question_id}")
 
         # Mark survey as completed
         user.completed_survey = True
@@ -120,11 +121,11 @@ def save_all_user_answers(user_id: int, answers: Dict[str, Any], questions_map: 
 
         # Commit all changes
         session.commit()
-        logger.info(f"Saved all answers for user {user_id}")
+        info(f"Збережено всі відповіді для користувача {user_id}")
         return True
     except SQLAlchemyError as e:
         session.rollback()
-        logger.error(f"Error saving answers for user {user_id}: {e}")
+        error(f"Помилка збереження відповідей для користувача {user_id}: {e}")
         return False
     finally:
         session.close()
@@ -147,9 +148,10 @@ def get_question_answers(question_id: int) -> List[Dict[str, Any]]:
                 "timestamp": answer.timestamp
             })
 
+        debug(f"Отримано {len(answers)} відповідей на питання {question_id}")
         return answers
     except SQLAlchemyError as e:
-        logger.error(f"Error fetching answers for question {question_id}: {e}")
+        error(f"Помилка отримання відповідей для питання {question_id}: {e}")
         return []
     finally:
         session.close()
@@ -177,9 +179,10 @@ def get_all_answers() -> Dict[int, List[Dict[str, Any]]]:
                 "timestamp": answer.timestamp
             })
 
+        info(f"Отримано дані для {len(answers_by_question)} питань")
         return answers_by_question
     except SQLAlchemyError as e:
-        logger.error(f"Error fetching all answers: {e}")
+        error(f"Помилка отримання всіх відповідей: {e}")
         return {}
     finally:
         session.close()
@@ -198,14 +201,17 @@ def get_survey_stats():
         # Get total answers
         total_answers = session.query(func.count(Answer.id)).scalar() or 0
 
-        return {
+        stats = {
             "total_users": total_users,
             "completed_surveys": completed_surveys,
             "total_answers": total_answers,
             "completion_rate": (completed_surveys / total_users * 100) if total_users > 0 else 0
         }
+
+        info(f"Статистика опитування: {stats}")
+        return stats
     except SQLAlchemyError as e:
-        logger.error(f"Error fetching survey stats: {e}")
+        error(f"Помилка отримання статистики опитування: {e}")
         return {
             "total_users": 0,
             "completed_surveys": 0,

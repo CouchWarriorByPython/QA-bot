@@ -5,11 +5,15 @@ from typing import Tuple, Optional
 
 from bot.utils.helpers import wrap_text, questions_map
 from bot.db.database import get_question_answers
+from bot.logger import info, error, debug
 
 
 def generate_pie_chart(question_id):
     """Generate a pie chart for a specific question and return image as bytes"""
+    debug(f"Генерація діаграми для питання {question_id}")
+
     if question_id not in questions_map:
+        warning(f"Питання з ID {question_id} не знайдено")
         return None, None  # If question not found
 
     # Get question info
@@ -21,6 +25,7 @@ def generate_pie_chart(question_id):
     answers_data = get_question_answers(question_id)
 
     if not answers_data:
+        debug(f"Немає відповідей для питання {question_id}")
         return None, None  # If no answers
 
     # Process answers
@@ -36,10 +41,12 @@ def generate_pie_chart(question_id):
                 all_answers.append(answer_text.strip())
 
     if not all_answers:
+        debug(f"Немає валідних відповідей для питання {question_id} після обробки")
         return None, None  # If no valid answers after processing
 
     # Count answer frequency
     answer_counts = pd.Series(all_answers).value_counts()
+    debug(f"Знайдено {len(answer_counts)} різних варіантів відповідей для питання {question_id}")
 
     # Create figure
     plt.figure(figsize=(8, 6))
@@ -97,17 +104,20 @@ def generate_pie_chart(question_id):
         percentage = (count / total_responses) * 100
         color_data_text += f"{answer} - {count} відповідей ({percentage:.1f}%)\n"
 
+    info(f"Успішно згенеровано діаграму для питання {question_id} з {total_responses} відповідями")
     return buffer, color_data_text
 
 
 def generate_survey_stats_chart() -> Tuple[Optional[io.BytesIO], Optional[str]]:
     """Generate a chart showing overall survey statistics"""
+    debug("Генерація діаграми статистики опитування")
     from bot.db.database import get_survey_stats
 
     # Get survey statistics
     stats = get_survey_stats()
 
     if stats["total_users"] == 0:
+        debug("Немає даних для візуалізації статистики опитування")
         return None, None  # No data to visualize
 
     # Create figure
@@ -179,4 +189,5 @@ def generate_survey_stats_chart() -> Tuple[Optional[io.BytesIO], Optional[str]]:
         f"Всього відповідей: {stats['total_answers']}\n"
     )
 
+    info("Успішно згенеровано діаграму статистики опитування")
     return buffer, stats_text
