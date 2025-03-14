@@ -1,13 +1,13 @@
 import textwrap
 import json
 import logging
-from datetime import datetime
 from typing import Dict, Any
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from bot.configs import answers_sheet, QUESTIONS_FILE, ADMIN_IDS
+from bot.configs import QUESTIONS_FILE, ADMIN_IDS
 from bot.models.callbacks import AnswerCallback
+from bot.db.database import save_all_user_answers
 
 logger = logging.getLogger(__name__)
 
@@ -93,24 +93,14 @@ async def generate_keyboard(question_data: Dict[str, Any], user_answers: Dict[st
 
 
 async def save_answers(user_id: int, user_answers: Dict[str, Any]) -> None:
-    """Save user answers to the configured storage."""
+    """Save user answers to SQLAlchemy database."""
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        rows = []
+        # Use the SQLAlchemy function to save all answers
+        result = save_all_user_answers(user_id, user_answers, questions_map)
 
-        for question in questions:
-            q_text = question["question"]
-            q_id = question["question_id"]
-            answer_entry = user_answers.get(q_text, {})
-
-            selected = answer_entry.get("selected")
-            if isinstance(selected, list):
-                selected = " | ".join(selected)
-
-            custom = answer_entry.get("custom") or ""
-            rows.append([user_id, timestamp, q_id, q_text, selected or "", custom])
-
-        answers_sheet.append_rows(rows)
-        logger.info(f"Answers from user {user_id} saved successfully")
+        if result:
+            logger.info(f"Answers from user {user_id} saved successfully to database")
+        else:
+            logger.error(f"Failed to save answers for user {user_id} to database")
     except Exception as e:
-        logger.error(f"Failed to save answers for user {user_id}: {e}")
+        logger.error(f"Exception while saving answers for user {user_id}: {e}")
