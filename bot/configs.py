@@ -21,3 +21,5 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()
 
 ADMIN_IDS = [446915311, 299793265]
+
+IMAGES_FOLDER = os.path.join(CURRENT_FOLDER, "src")

@@ -1,10 +1,11 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+import os
 
-from bot.configs import bot
+from bot.configs import bot, IMAGES_FOLDER
 from bot.models.state import SurveyStates
 from bot.models.callbacks import AnswerCallback, AdminCallback
 from bot.utils.helpers import (
@@ -219,19 +220,56 @@ async def send_question(user_id: int, state: FSMContext) -> None:
 
     debug(f"Відправка питання {question_index + 1} користувачу {user_id}")
 
-    # Handle questions with answer options
-    if question_data["answers"]:
-        keyboard = await generate_keyboard(question_data, user_answers)
-        await bot.send_message(user_id, question_text, reply_markup=keyboard)
-        await state.set_state(SurveyStates.answering)
+    # Send image for the question first
+    image_number = question_index + 1  # Question indexes start from 0, image files from 1
+    image_filename = f"{image_number}.PNG"
+    image_path = os.path.join(IMAGES_FOLDER, image_filename)
 
-    # Handle text-only questions
-    elif question_data["text_response"]:
-        await bot.send_message(user_id, question_text)
-        await state.set_state(SurveyStates.custom_input)
+    try:
+        # Create appropriate keyboard if needed
+        keyboard = None
+        if question_data["answers"]:
+            keyboard = await generate_keyboard(question_data, user_answers)
+            await state.set_state(SurveyStates.answering)
+        elif question_data["text_response"]:
+            await state.set_state(SurveyStates.custom_input)
+
+        # Send the image with caption and keyboard (if available)
+        image = FSInputFile(image_path)
+        await bot.send_photo(
+            user_id,
+            image,
+            caption=question_text,
+            reply_markup=keyboard
+        )
+        debug(f"Відправлено зображення {image_filename} для питання {question_index + 1}")
+
+    except FileNotFoundError:
+        error(f"Зображення {image_filename} не знайдено у {IMAGES_FOLDER}")
+        # If image not found, just send the question as text
+        if question_data["answers"]:
+            keyboard = await generate_keyboard(question_data, user_answers)
+            await bot.send_message(user_id, question_text, reply_markup=keyboard)
+            await state.set_state(SurveyStates.answering)
+        elif question_data["text_response"]:
+            await bot.send_message(user_id, question_text)
+            await state.set_state(SurveyStates.custom_input)
+
+    except Exception as e:
+        error(f"Помилка при відправці зображення для питання {question_index + 1}: {e}")
+        # If any error, fall back to text-only question
+        if question_data["answers"]:
+            keyboard = await generate_keyboard(question_data, user_answers)
+            await bot.send_message(user_id, question_text, reply_markup=keyboard)
+            await state.set_state(SurveyStates.answering)
+
+        # Handle text-only questions
+        elif question_data["text_response"]:
+            await bot.send_message(user_id, question_text)
+            await state.set_state(SurveyStates.custom_input)
 
     # Skip questions without any response type
-    else:
+    if not question_data["answers"] and not question_data["text_response"]:
         warning(f"Питання {question_index + 1} не має варіантів відповіді, пропускаємо")
         data["current_question"] += 1
         await state.set_data(data)
