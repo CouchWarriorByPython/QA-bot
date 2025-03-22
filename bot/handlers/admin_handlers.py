@@ -30,26 +30,27 @@ def register_admin_handlers(router: Router):
 
         # Send all charts in sequence
         for question_id in range(1, 21):  # Assuming question IDs are 1 through 20
-            debug(f"Генерація діаграми для питання {question_id}")
-            chart_buffer, color_data = generate_pie_chart(question_id)
+            if question_id not in [15, 17]:
+                debug(f"Генерація діаграми для питання {question_id}")
+                chart_buffer, color_data = generate_pie_chart(question_id)
 
-            if not chart_buffer:
-                error(f"Не вдалося згенерувати діаграму для питання {question_id}")
-                await callback_query.message.answer(f"Не вдалося згенерувати діаграму для питання {question_id}.")
-                continue
+                if not chart_buffer:
+                    error(f"Не вдалося згенерувати діаграму для питання {question_id}")
+                    await callback_query.message.answer(f"Не вдалося згенерувати діаграму для питання {question_id}.")
+                    continue
 
-            # Send the chart without any caption
-            await callback_query.message.answer_photo(
-                BufferedInputFile(chart_buffer.read(), filename=f"question_{question_id}.png")
-            )
-            info(f"Відправлено діаграму для питання {question_id}")
+                # Send the chart without any caption
+                await callback_query.message.answer_photo(
+                    BufferedInputFile(chart_buffer.read(), filename=f"question_{question_id}.png")
+                )
+                info(f"Відправлено діаграму для питання {question_id}")
 
-            # Format the results data without repeating the question
-            results_text = "📊 Результати:\n\n"
-            for line in color_data.split('\n'):
-                if line.strip():
-                    results_text += line + "\n"
+                # Format the results data without repeating the question
+                results_text = "📊 Результати:\n\n"
+                for line in color_data.split('\n'):
+                    if line.strip():
+                        results_text += line + "\n"
 
-            await callback_query.message.answer(results_text)
+                await callback_query.message.answer(results_text)
 
     debug("Обробники адміністратора успішно зареєстровані")
