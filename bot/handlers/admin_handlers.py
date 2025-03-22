@@ -29,7 +29,7 @@ def register_admin_handlers(router: Router):
         await callback_query.message.answer("Генерую діаграми для всіх питань...")
 
         # Send all charts in sequence
-        for question_id in range(1, 14):  # Assuming question IDs are 1 through 13
+        for question_id in range(1, 21):  # Assuming question IDs are 1 through 20
             debug(f"Генерація діаграми для питання {question_id}")
             chart_buffer, color_data = generate_pie_chart(question_id)
 
