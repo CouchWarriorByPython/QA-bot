@@ -209,14 +209,7 @@ async def send_question(user_id: int, state: FSMContext) -> None:
     # Check if survey is complete
     if question_index >= len(questions):
         info(f"Користувач {user_id} завершив опитування")
-        final_message = """
-            Після збору анкет ми сформуємо технічне завдання:\n
-            • Які продукти замовляти\n
-            • Які страви готувати\n
-            • Скільки потрібно площі\n
-            • Який формат і графік роботи магазину\n
-            • Які ремонти та обладнання необхідні
-        """
+        final_message = "Після збору анкет ми сформуємо технічне завдання:\n\n• Які продукти замовляти\n• Які страви готувати\n• Скільки потрібно площі\n• Який формат і графік роботи магазину\n• Які ремонти та обладнання необхідні"
         await bot.send_message(user_id, final_message)
         await save_answers(user_id, user_answers)
         await state.clear()
